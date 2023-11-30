@@ -14,14 +14,105 @@ path operator""_p(const char* data, std::size_t sz) {
     return path(data, data + sz);
 }
 
-// напишите эту функцию
-bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories);
-
 string GetFileContents(string file) {
     ifstream stream(file);
 
     // конструируем string по двум итераторам
     return {(istreambuf_iterator<char>(stream)), istreambuf_iterator<char>()};
+}
+
+bool Preprocess_recurs(const path& in_file, ofstream& out, const path& current_file, const vector<path>& include_directories, int line_number)
+{
+    
+    ifstream in(in_file);
+    if(!in)
+        return false;
+    
+
+    static regex file_include(R"/(\s*#\s*include\s*"([^"]*)"\s*)/");
+    static regex biblio_include(R"/(\s*#\s*include\s*<([^>]*)>\s*)/");
+    smatch m;
+    string line;
+    
+    path parent = in_file.parent_path();
+    while(getline(in, line))
+    {
+        line_number++;
+        if(regex_match(line, m, file_include))
+        {
+            path p = string(m[1]);
+            string ps = p.string();
+            bool found = false;
+            if(filesystem::exists(parent/p))
+            {
+                Preprocess_recurs(parent/p, out, current_file.string(), include_directories, line_number);
+            }
+            else{
+                for (const auto& dir : include_directories) {
+                    //line_number++;
+                    path is_path = dir/p;
+                    if(filesystem::exists(is_path))
+                    {
+                        Preprocess_recurs(dir/p, out, current_file.string(), include_directories, line_number);
+                        found = true;
+                    }
+                   
+                }
+                if (!found) {
+                    cout << "unknown include file " << m[1].str()
+                    << " at file " << current_file.string()
+                    << " at line " << line_number << endl;
+                    return false;
+                }
+            }
+            
+            
+        }
+        else if (regex_match(line, m, biblio_include)) {
+            path p =string(m[1]);
+            path parent2 = p.parent_path();
+            bool found = false;
+            for (const auto& dir : include_directories) {
+                //line_number++;
+                path is_path = dir/p;
+                if(filesystem::exists(is_path))
+                {
+                    Preprocess_recurs(dir/p, out, current_file.string(), include_directories, line_number);
+                    found = true;
+                }
+               
+            }
+            if (!found) {
+                cout << "unknown include file " << m[1].str()
+                << " at file " << current_file.string()
+                << " at line " << line_number << endl;
+                return false;
+            }
+        } else {
+            out << line << endl;
+           
+            
+        }
+    }
+    return true;
+}
+
+// напишите эту функцию
+bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories)
+{
+    ifstream in(in_file);
+    if(!in)
+        return false;
+    ofstream out(out_file);
+    
+    int line_number = 0;
+    if(!Preprocess_recurs(in_file, out, in_file, include_directories, line_number))
+    {
+        return false;
+    }
+    
+    
+    return true;
 }
 
 void Test() {
